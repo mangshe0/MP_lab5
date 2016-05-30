@@ -17,25 +17,6 @@
 #include <boost\mpl\contains.hpp>
 namespace mpl = boost::mpl;
 
-//#include <loki\AbstractFactory.h>
-//
-//typedef Loki::AbstractFactory <
-//	LOKI_TYPELIST_3(A1, A2, A3)
-//> MyAbstractFactory;
-//
-//typedef Loki::ConcreteFactory <
-//	MyAbstractFactory,
-//	Loki::OpNewFactoryUnit,
-//	LOKI_TYPELIST_3(B1, B2, B3)
-//> MyConcreteFactory;
-//
-//void process(MyAbstractFactory* pFactory)
-//{
-//	A1* pA1 = pFactory->Create<A1>();
-//	A2* pA1 = pFactory->Create<A2>();
-//	A3 *pA1 = pFactory->Create<A3>();
-//}
-
 struct print_type
 {
 	template <typename T>
@@ -90,11 +71,6 @@ struct has_inheritor_in < X, End, End >
 	typedef typename mpl::false_ type;
 };
 
-typedef mpl::filter_view <
-	input_data,
-	has_inheritor_in<mpl::_1, mpl::begin<input_data>::type, mpl::end<input_data>::type>
-> ::type base_classes;
-
 struct nil{};
 
 template <typename Base, typename Begin, typename End>
@@ -120,44 +96,64 @@ struct get_inheritor_from < X, End, End >
 	typedef nil type;
 };
 
-typedef mpl::transform <
-	mpl::copy <
+template <typename InputData>
+struct splitClassesByInheritance
+{
+	typedef typename mpl::filter_view <
+		typename InputData,
+		has_inheritor_in<
+			mpl::_1, 
+			typename mpl::begin<InputData>::type,
+			typename mpl::end<InputData>::type>
+	> ::type base_classes;
+
+	typedef typename mpl::copy <
 		base_classes,
 		mpl::back_inserter<mpl::vector0<>>
-	> ::type,
-	get_inheritor_from<mpl::_1, mpl::begin<input_data>::type, mpl::end<input_data>::type>
-> ::type inheritors;
+	> ::type base_classes_vector;
 
-BOOST_STATIC_ASSERT(mpl::size<input_data>::type::value == 
-	(mpl::size<base_classes>::type::value + mpl::size<inheritors>::type::value));
+	typedef typename mpl::transform <
+		typename base_classes_vector,
+		get_inheritor_from<
+			mpl::_1, 
+			typename mpl::begin<InputData>::type, 
+			typename mpl::end<InputData>::type>
+	> ::type inheritors;
 
-template <typename BaseClasses>
+	BOOST_STATIC_ASSERT(mpl::size<input_data>::type::value ==
+		(mpl::size<base_classes>::type::value + mpl::size<inheritors>::type::value));
+};
+
+template <typename InputData>
 struct AbstractFactory
 {
+	typedef typename splitClassesByInheritance<InputData>::base_classes base_classes;
+	typedef typename splitClassesByInheritance<InputData>::inheritors inheritors;
+
 	template <typename T>
 	T* create();
 };
 
-template <typename ConcreteClasses>
-struct ConcreteFactory : public AbstractFactory<ConcreteClasses>
+template <typename InputData>
+struct ConcreteFactory : public AbstractFactory<InputData>
 {
 	template <typename T>
 	T* create()
 	{
-		BOOST_STATIC_ASSERT(mpl::contains<ConcreteClasses, T>::type::value == true);
+		BOOST_STATIC_ASSERT(mpl::contains<inheritors, T>::type::value == true);
 		return new T();
 	}
 };
 
 int main()
 {
-	print_types<base_classes>();
-	print_types<inheritors>();
+	print_types<splitClassesByInheritance<input_data>::base_classes>();
+	print_types<splitClassesByInheritance<input_data>::inheritors>();
 
 	std::cout << std::endl;
 	std::cout << std::endl;
 
-	ConcreteFactory<inheritors> factory;
+	ConcreteFactory<input_data> factory;
 
 	B1* b1 = factory.create<B1>();
 	B2* b2 = factory.create<B2>();
